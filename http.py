@@ -3,6 +3,8 @@ import os.path
 import uuid
 from glob import glob
 from datetime import datetime
+import os
+import base64
 
 class HttpServer:
 	def __init__(self):
@@ -38,31 +40,39 @@ class HttpServer:
 		return response
 
 	def proses(self,data):
+		# set header and body for post if data contains \r\n\r\n
+		if "\r\n\r\n" in data:
+			header, body = data.split("\r\n\r\n", 1)
 		
 		requests = data.split("\r\n")
-		#print(requests)
+		# print(requests)
 
 		baris = requests[0]
 		#print(baris)
 
-		all_headers = [n for n in requests[1:] if n!='']
+		all_headers = [n for n in requests[0:] if n!='']
+		# print(all_headers)
 
 		j = baris.split(" ")
 		try:
 			method=j[0].upper().strip()
+
 			if (method=='GET'):
 				object_address = j[1].strip()
 				return self.http_get(object_address, all_headers)
 			if (method=='POST'):
 				object_address = j[1].strip()
-				return self.http_post(object_address, all_headers)
+				return self.http_post(object_address, all_headers, body)
+			if (method=='DELETE'):
+				object_address = j[1].strip()
+				return self.http_delete(object_address, all_headers)
 			else:
 				return self.response(400,'Bad Request','',{})
 		except IndexError:
 			return self.response(400,'Bad Request','',{})
 	def http_get(self,object_address,headers):
 		files = glob('./*')
-		#print(files)
+		# print(files)
 		thedir='./'
 		if (object_address == '/'):
 			return self.response(200,'OK','Ini Adalah web Server percobaan',dict())
@@ -71,6 +81,20 @@ class HttpServer:
 			return self.response(302,'Found','',dict(location='https://youtu.be/katoxpnTf04'))
 		if (object_address == '/santai'):
 			return self.response(200,'OK','santai saja',dict())
+
+		if (object_address == '/list'):
+			dirpath = './upload/*'
+			file_list = glob(dirpath)
+			if file_list:
+				filename_list = [f"- {os.path.basename(path)}" for path in file_list]
+				file_list_str = '\n'.join(filename_list)
+				if file_list_str:
+					resp = f"File List in ./upload/ directory:\n{file_list_str}"
+					return self.response(200, 'OK', resp, dict())
+				else:
+					return self.response(200, 'OK', 'No file detected', dict())
+            
+            
 
 
 		object_address=object_address[1:]
@@ -87,11 +111,42 @@ class HttpServer:
 		headers['Content-type']=content_type
 		
 		return self.response(200,'OK',isi,headers)
-	def http_post(self,object_address,headers):
-		headers ={}
+	def http_post(self,object_address,headers, body=""):
+		header_dict = {}
+		for h in headers[1:]:
+			if ':' in h:
+				key, val = h.split(':', 1)
+				header_dict[key.strip()] = val.strip()
 		isi = "kosong"
-		return self.response(200,'OK',isi,headers)
-		
+
+		if (object_address == '/upload'):
+			try:
+				# pindah ke direktori ./upload
+				dirpath = "./upload/"
+				if not os.path.exists(dirpath):
+					os.mkdir(dirpath)
+				os.chdir(dirpath)
+
+				filename = header_dict.get('X-Filename')
+				decoded_file_body = base64.b64decode(body)
+				with open(filename, 'wb') as f:
+					f.write(decoded_file_body)
+				isi = f"File {filename} berhasil diupload"
+				return self.response(200, 'OK', isi, {})
+			except Exception as e:
+				return self.response(500, 'Failed', f'error upload: {e}', {})
+			
+
+		return self.response(404, 'Not Found', 'POST target tidak ditemukan', {})
+
+	def http_delete(self, object_address, headers):
+		try:
+			target_filepath = '.' + object_address
+			os.remove(target_filepath)
+			return self.response(200, 'OK', 'Success delete file', {})
+		except Exception as e:
+			return self.response(400, 'Error', f'Error delete: {e}', {})
+		return self.response(404, 'Error', 'File not Found', {})
 			 	
 #>>> import os.path
 #>>> ext = os.path.splitext('/ak/52.png')
@@ -106,18 +161,3 @@ if __name__=="__main__":
 	#print(d)
 #	d = httpserver.http_get('testing.txt')
 #	print(d)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

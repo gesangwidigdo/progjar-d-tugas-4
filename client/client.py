@@ -1,95 +1,96 @@
-import sys
 import socket
-import json
 import logging
-import ssl
+import base64
 import os
+import argparse
 
-server_address = ('www.its.ac.id', 443)
-server_address = ('www.ietf.org',443)
+parser = argparse.ArgumentParser()
+parser.add_argument("--host", required=True, help="Server host")
+parser.add_argument("--port", type=int, required=True, help="Server port")
+parser.add_argument("--command", choices=["list", "upload", "delete"], required=True, help="Command to execute")
+parser.add_argument("--file", help="File path for upload or delete")
+args = parser.parse_args()
 
-
-def make_socket(destination_address='localhost', port=12000):
+def send_command(command_str):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_address = (destination_address, port)
+        server_address = (args.host, args.port)
         logging.warning(f"connecting to {server_address}")
         sock.connect(server_address)
-        return sock
-    except Exception as ee:
-        logging.warning(f"error {str(ee)}")
-
-
-def make_secure_socket(destination_address='localhost', port=10000):
-    try:
-        # get it from https://curl.se/docs/caextract.html
-
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        context.load_verify_locations(os.getcwd() + '/domain.crt')
-
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_address = (destination_address, port)
-        logging.warning(f"connecting to {server_address}")
-        sock.connect(server_address)
-        secure_socket = context.wrap_socket(sock, server_hostname=destination_address)
-        logging.warning(secure_socket.getpeercert())
-        return secure_socket
-    except Exception as ee:
-        logging.warning(f"error {str(ee)}")
-
-
-
-def send_command(command_str, is_secure=False):
-    alamat_server = server_address[0]
-    port_server = server_address[1]
-    #    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # gunakan fungsi diatas
-    if is_secure == True:
-        sock = make_secure_socket(alamat_server, port_server)
-    else:
-        sock = make_socket(alamat_server, port_server)
-
-    logging.warning(f"connecting to {server_address}")
-    try:
         logging.warning(f"sending message ")
+        command_str = command_str + "\r\n"
         sock.sendall(command_str.encode())
-        logging.warning(command_str)
-        # Look for the response, waiting until socket is done (no more data)
-        data_received = ""  # empty string
+
+        data_recv = ""
         while True:
-            # socket does not receive all data at once, data comes in part, need to be concatenated at the end of process
-            data = sock.recv(2048)
+            data = sock.recv(4096)
             if data:
-                # data is not empty, concat with previous content
-                data_received += data.decode()
-                if "\r\n\r\n" in data_received:
+                data_recv += data.decode()
+                if "\r\n\r\n" in data_recv:
                     break
-            else:
-                # no more data, stop the process by break
-                break
-        # at this point, data_received (string) will contain all data coming from the socket
-        # to be able to use the data_received as a dict, need to load it using json.loads()
-        hasil = data_received
+                else:
+                    break
+        hasil = data_recv
         logging.warning("data received from server:")
         return hasil
     except Exception as ee:
-        logging.warning(f"error during data receiving {str(ee)}")
+        logging.warning(f"error during data receiving: {str(ee)}")
         return False
 
-#> GET / HTTP/1.1
-#> Host: www.its.ac.id
-#> User-Agent: curl/8.7.1
-#> Accept: */*
-#>
-
-if __name__ == '__main__':
-    cmd = f"""GET /rfc/rfc2616.txt HTTP/1.1
-Host: www.ietf.org
+cmd = ""
+def get_files():
+    # Get Request
+    cmd = f"""GET /list HTTP/1.1
+Host: 172.16.16.101
 User-Agent: myclient/1.1
 Accept: */*
-
 """
-    hasil = send_command(cmd, is_secure=True)
-    print(hasil)
+    return send_command(cmd)
+
+def upload_file(filepath):
+    try:
+        with open(filepath, "rb") as f:
+            filecontent = base64.b64encode(f.read()).decode()
+
+        filename = os.path.basename(filepath)
+    
+        headers = [
+            f"POST /upload HTTP/1.1",
+            f"Host: 172.16.16.101",
+            f"User-Agent: myclient/1.1",
+            f"Content-Length: {len(filecontent)}",
+            f"X-Filename: {filename}"
+        ]
+    
+        cmd = "\r\n".join(headers) + "\r\n\r\n" + filecontent
+        return send_command(cmd)
+    except Exception as ee:
+        logging.warning(f"Failed to read or encode file: {str(ee)}")
+        return False
+
+def delete_file(route_file_path):
+    cmd = f"""DELETE /{route_file_path} HTTP/1.1
+Host: 172.16.16.101
+User-Agent: myclient/1.1
+"""
+    return send_command(cmd)
+
+
+if __name__ == "__main__":
+    if args.command == "list":
+        result = get_files()
+    elif args.command == "upload":
+        if not args.file:
+            print("Please provide --file for upload.")
+            exit(1)
+        result = upload_file(args.file)
+    elif args.command == "delete":
+        if not args.file:
+            print("Please provide --file for delete.")
+            exit(1)
+        result = delete_file(args.file)
+    else:
+        result = "Invalid command."
+
+    print("Result from server:")
+    print(result)
