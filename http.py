@@ -141,7 +141,12 @@ class HttpServer:
 
 	def http_delete(self, object_address, headers):
 		try:
-			target_filepath = '.' + object_address
+			if object_address.startswith('/'):
+				object_address = object_address[1:]
+
+			dirpath = './upload'
+			target_filepath = os.path.join(dirpath, object_address)
+			print('Target file path: ', target_filepath)
 			os.remove(target_filepath)
 			return self.response(200, 'OK', 'Success delete file', {})
 		except Exception as e:
