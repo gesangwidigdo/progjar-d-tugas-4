@@ -41,7 +41,7 @@ cmd = ""
 def get_files():
     # Get Request
     cmd = f"""GET /list HTTP/1.1
-Host: 172.16.16.101
+Host: {args.host}
 User-Agent: myclient/1.1
 Accept: */*
 """
@@ -56,7 +56,7 @@ def upload_file(filepath):
     
         headers = [
             f"POST /upload HTTP/1.1",
-            f"Host: 172.16.16.101",
+            f"Host: {args.host}",
             f"User-Agent: myclient/1.1",
             f"Content-Length: {len(filecontent)}",
             f"X-Filename: {filename}"
@@ -70,7 +70,7 @@ def upload_file(filepath):
 
 def delete_file(route_file_path):
     cmd = f"""DELETE /{route_file_path} HTTP/1.1
-Host: 172.16.16.101
+Host: {args.host}
 User-Agent: myclient/1.1
 """
     return send_command(cmd)
